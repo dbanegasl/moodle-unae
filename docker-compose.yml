@@ -1,0 +1,90 @@
+version: "3"
+services:
+    nginx:
+        image: nginx:alpine
+        volumes:
+            - "./etc/nginx/default.conf:/etc/nginx/conf.d/default.conf"
+            - "./etc/ssl:/etc/ssl"
+            - "./www:/var/www/html:rw"
+            - "./etc/nginx/default.template.conf:/etc/nginx/conf.d/default.template"
+            - "./etc/nginx/nginx.conf:/etc/nginx/nginx.conf"
+
+        ports:
+            - "80:80"
+            - "443:443"
+        environment:
+            - NGINX_HOST=${NGINX_HOST}
+        command: /bin/sh -c "envsubst '$$NGINX_HOST' < /etc/nginx/conf.d/default.template > /etc/nginx/conf.d/default.conf && nginx -g 'daemon off;'"
+        restart: always
+        # depends_on:
+        #     - php
+        #     - mysqldb
+    php:
+        # image: nanoninja/php-fpm:${PHP_VERSION}
+        build: "moodle/."
+        image: "softdigy/php-fpm"
+        restart: always
+        volumes:
+            - "./etc/php/php.ini:/usr/local/etc/php/conf.d/php.ini"
+            - "./etc/www.conf:/usr/local/etc/php-fpm.d/www.conf"
+            - "./www:/var/www/html"
+            - "./data:/var/www/moodledata:rw"
+            - "/etc/localtime:/etc/localtime:ro"
+    db:
+        container_name: moodle-db
+        image: "mysql:${MOODLE_DOCKER_MYSQL_VERSION}"
+        command: --default-authentication-plugin=mysql_native_password --max_allowed_packet=932505856
+        restart: always
+        volumes:
+          - ./mysql-data:/var/lib/mysql
+          - ./mysqldt:/mysqldt
+          - ./config/mysql.conf.d:/etc/mysql/mysql.conf.d
+          - ./config/conf.d:/etc/mysql/conf.d
+        environment:
+          MYSQL_USER: moodle
+          MYSQL_ROOT_PASSWORD:  "${MOODLE_ROOT_PASSWORD}" 
+          MYSQL_PASSWORD:  "${MOODLE_ROOT_PASSWORD}" 
+          MYSQL_DATABASE: moodle
+          TZ: "America/Guayaquil"
+        ports: 
+          - 3306:3306
+    cronicle:
+        container_name: cronicle
+        image: bluet/cronicle-docker:latest
+        restart: always
+        volumes:
+          - ./cronicle/data:/opt/cronicle/data:rw 
+          - ./cronicle/logs:/opt/cronicle/logs:rw
+          - /var/run/docker.sock:/var/run/docker.sock:rw
+          - ./cronicle/plugins:/opt/cronicle/plugins:rw
+          - ./cronicle/app:/app:rw
+        environment:
+          CRONICLE_base_app_url: http://192.168.3.180:3012
+          CRONICLE_web_direct_connect: 0
+          TZ: "America/Guayaquil"
+        ports: 
+          - 3012:3012
+    mongo:
+        container_name: mongo-cache
+        image: mongo
+        restart: always
+        volumes:
+            - ./mongodb:/data/db 
+        environment:
+            MONGO_INITDB_ROOT_USERNAME: root
+            MONGO_INITDB_ROOT_PASSWORD: evea2021
+    phpmyadmin:
+        image: phpmyadmin
+        container_name: phpmyadmin
+        restart: always
+        ports:
+            - 81:80
+        environment:
+            PMA_ARBITRARY: 1
+            PMA_HOST: moodle-db
+            PMA_PORT: 3306
+            PMA_ABSOLUTE_URI: https://historico77-distancia.unae.edu.ec/pa
+    mlbackend:
+        image: moodlehq/moodle-mlbackend-python:2.6.6-python3.7.5
+        restart: always
+        container_name: mlbackend
